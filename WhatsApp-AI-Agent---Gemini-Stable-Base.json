@@ -1,0 +1,70 @@
+{
+  "name": "WhatsApp AI Agent - Gemini Stable Base",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "whatsapp",
+        "responseMode": "onReceived"
+      },
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "position": [-600, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "const entry = $json.entry?.[0]?.changes?.[0]?.value?.messages?.[0];\nif(!entry) return [];\nreturn [{json:{from: entry.from, message: entry.text?.body || ''}}];"
+      },
+      "name": "Extract WhatsApp Message",
+      "type": "n8n-nodes-base.function",
+      "position": [-350, 300]
+    },
+    {
+      "parameters": {
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=YOUR_GEMINI_API_KEY",
+        "method": "POST",
+        "jsonParameters": true,
+        "sendBody": true,
+        "bodyParametersJson": "={\"contents\":[{\"role\":\"user\",\"parts\":[{\"text\":\"You are a helpful AI assistant for WhatsApp users. User message: {{$json.message}}\"}]}]}"
+      },
+      "name": "Gemini AI",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [-100, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "const reply = $json.candidates?.[0]?.content?.parts?.[0]?.text || 'Sorry, I could not understand.';\nreturn [{json:{from:$node['Extract WhatsApp Message'].json.from, reply}}];"
+      },
+      "name": "Extract Gemini Reply",
+      "type": "n8n-nodes-base.function",
+      "position": [50, 300]
+    },
+    {
+      "parameters": {
+        "url": "https://graph.facebook.com/v19.0/YOUR_PHONE_ID/messages",
+        "method": "POST",
+        "jsonParameters": true,
+        "sendBody": true,
+        "bodyParametersJson": "={\"messaging_product\":\"whatsapp\",\"to\":\"{{$json.from}}\",\"type\":\"text\",\"text\":{\"body\":\"{{$json.reply}}\"}}",
+        "headerParametersJson": "={\"Authorization\":\"Bearer YOUR_WHATSAPP_TOKEN\",\"Content-Type\":\"application/json\"}"
+      },
+      "name": "Send WhatsApp Reply",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [250, 300]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [[{"node":"Extract WhatsApp Message","type":"main","index":0}]]
+    },
+    "Extract WhatsApp Message": {
+      "main": [[{"node":"Gemini AI","type":"main","index":0}]]
+    },
+    "Gemini AI": {
+      "main": [[{"node":"Extract Gemini Reply","type":"main","index":0}]]
+    },
+    "Extract Gemini Reply": {
+      "main": [[{"node":"Send WhatsApp Reply","type":"main","index":0}]]
+    }
+  }
+}
